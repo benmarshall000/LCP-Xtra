@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GB Towns-Cities Income Disparity Map</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            max-width: 300px;
+        }
+        .info-panel h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .legend {
+            line-height: 20px;
+            color: #555;
+            font-size: 12px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-line {
+            width: 30px;
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+        .town-popup {
+            font-size: 13px;
+        }
+        .town-popup h4 {
+            margin: 0 0 8px 0;
+            color: #2c3e50;
+        }
+        .popup-stat {
+            margin: 3px 0;
+        }
+        .popup-label {
+            font-weight: 600;
+            color: #555;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #666;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="info-panel">
+        <h3>Income Disparity Map</h3>
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-line" style="height: 6px; background: #d73027;"></div>
+                <span>High disparity (£7,000+)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="height: 4px; background: #fc8d59;"></div>
+                <span>Medium (£5,000-£7,000)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="height: 2px; background: #fee08b;"></div>
+                <span>Low (£3,000-£5,000)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="height: 1px; background: #d9ef8b;"></div>
+                <span>Minimal (&lt;£3,000)</span>
+            </div>
+        </div>
+        <hr style="margin: 10px 0; border: none; border-top: 1px solid #ddd;">
+        <p style="font-size: 11px; color: #666; margin: 5px 0;">
+            Click on towns for details<br>
+            Line thickness = salary gap<br>
+            Data shows average salaries
+        </p>
+    </div>
+    <div class="loading" id="loading">Loading map data...</div>
+
+    <script>
+        // CSV data embedded directly
+        const csvData = `Town,Region,Average_Salary_GBP,Nearest_Major_City,Train_Time_Minutes,City_Average_Salary_GBP,Salary_Difference_GBP
+Blackpool,Lancashire,29500,Manchester,75,38500,9000
+Burnley,Lancashire,31200,Manchester,65,38500,7300
+Accrington,Lancashire,30800,Manchester,70,38500,7700
+Nelson,Lancashire,30500,Manchester,80,38500,8000
+Colne,Lancashire,30200,Manchester,85,38500,8300
+Darwen,Lancashire,31800,Bolton,45,34000,2200
+Blackburn,Lancashire,32000,Manchester,55,38500,6500
+Preston,Lancashire,33800,Manchester,50,38500,4700
+Lancaster,Lancashire,33200,Manchester,90,38500,5300
+Morecambe,Lancashire,31500,Manchester,95,38500,7000
+Barrow-in-Furness,Cumbria,32200,Manchester,120,38500,6300
+Workington,Cumbria,30800,Newcastle,110,37200,6400
+Whitehaven,Cumbria,31000,Newcastle,115,37200,6200
+Carlisle,Cumbria,33000,Newcastle,90,37200,4200
+Penrith,Cumbria,32800,Newcastle,85,37200,4400
+Hartlepool,County Durham,30500,Newcastle,80,37200,6700
+Darlington,County Durham,33500,Newcastle,45,37200,3700
+Bishop Auckland,County Durham,31200,Newcastle,70,37200,6000
+Durham,County Durham,34500,Newcastle,40,37200,2700
+Consett,County Durham,31800,Newcastle,60,37200,5400
+Hexham,Northumberland,33800,Newcastle,50,37200,3400
+Blyth,Northumberland,31500,Newcastle,35,37200,5700
+Cramlington,Northumberland,34200,Newcastle,25,37200,3000
+Ashington,Northumberland,31200,Newcastle,40,37200,6000
+Wansbeck,Northumberland,30800,Newcastle,45,37200,6400
+Rhyl,Denbighshire,29800,Manchester,85,38500,8700
+Prestatyn,Denbighshire,30200,Manchester,90,38500,8300
+Llandudno,Conwy,32500,Manchester,75,38500,6000
+Bangor,Gwynedd,31800,Manchester,95,38500,6700
+Caernarfon,Gwynedd,31200,Manchester,100,38500,7300
+Pwllheli,Gwynedd,30500,Manchester,120,38500,8000
+Aberystwyth,Ceredigion,32000,Birmingham,110,36800,4800
+Cardigan,Pembrokeshire,30800,Cardiff,105,37500,6700
+Haverfordwest,Pembrokeshire,32200,Cardiff,95,37500,5300
+Milford Haven,Pembrokeshire,31500,Cardiff,100,37500,6000
+Fishguard,Pembrokeshire,30200,Cardiff,115,37500,7300
+Newtown,Powys,31000,Birmingham,90,36800,5800
+Welshpool,Powys,31800,Birmingham,85,36800,5000
+Machynlleth,Powys,30500,Birmingham,100,36800,6300
+Brecon,Powys,32000,Cardiff,80,37500,5500
+Merthyr Tydfil,Rhondda Cynon Taf,31200,Cardiff,55,37500,6300
+Aberdare,Rhondda Cynon Taf,31800,Cardiff,50,37500,5700
+Mountain Ash,Rhondda Cynon Taf,30800,Cardiff,60,37500,6700
+Pontypridd,Rhondda Cynon Taf,33000,Cardiff,35,37500,4500
+Caerphilly,Caerphilly,32500,Cardiff,30,37500,5000
+Bargoed,Caerphilly,31000,Cardiff,45,37500,6500
+Blackwood,Caerphilly,31500,Cardiff,40,37500,6000
+Tredegar,Blaenau Gwent,30200,Cardiff,70,37500,7300
+Ebbw Vale,Blaenau Gwent,30500,Cardiff,65,37500,7000
+Abergavenny,Monmouthshire,33200,Cardiff,55,37500,4300`;
+
+        // Approximate coordinates for towns and cities (UK)
+        const coordinates = {
+            // Major cities
+            'Manchester': [53.4808, -2.2426],
+            'Newcastle': [54.9783, -1.6174],
+            'Birmingham': [52.4862, -1.8904],
+            'Cardiff': [51.4816, -3.1791],
+            
+            // Lancashire towns
+            'Blackpool': [53.8175, -3.0357],
+            'Burnley': [53.7893, -2.2401],
+            'Accrington': [53.7530, -2.3639],
+            'Nelson': [53.8345, -2.2143],
+            'Colne': [53.8547, -2.1753],
+            'Blackburn': [53.7485, -2.4846],
+            'Preston': [53.7632, -2.7031],
+            'Lancaster': [54.0465, -2.8007],
+            'Morecambe': [54.0707, -2.8703],
+            
+            // Cumbria
+            'Barrow-in-Furness': [54.1108, -3.2261],
+            'Workington': [54.6425, -3.5456],
+            'Whitehaven': [54.5482, -3.5865],
+            'Carlisle': [54.8925, -2.9327],
+            'Penrith': [54.6651, -2.7547],
+            
+            // County Durham
+            'Hartlepool': [54.6861, -1.2124],
+            'Darlington': [54.5252, -1.5528],
+            'Bishop Auckland': [54.6574, -1.6769],
+            'Durham': [54.7761, -1.5733],
+            'Consett': [54.8516, -1.8317],
+            
+            // Northumberland
+            'Hexham': [54.9695, -2.1040],
+            'Blyth': [55.1272, -1.5086],
+            'Cramlington': [55.0869, -1.5857],
+            'Ashington': [55.1810, -1.5689],
+            'Wansbeck': [55.1690, -1.5210],
+            
+            // Wales - North
+            'Rhyl': [53.3191, -3.4916],
+            'Prestatyn': [53.3365, -3.4073],
+            'Llandudno': [53.3238, -3.8276],
+            'Bangor': [53.2274, -4.1293],
+            'Caernarfon': [53.1394, -4.2708],
+            'Pwllheli': [52.8878, -4.4167],
+            
+            // Wales - Mid/West
+            'Aberystwyth': [52.4143, -4.0810],
+            'Cardigan': [52.0813, -4.6608],
+            'Haverfordwest': [51.8023, -4.9689],
+            'Milford Haven': [51.7128, -5.0407],
+            'Fishguard': [52.0035, -4.9785],
+            'Newtown': [52.5131, -3.3141],
+            'Welshpool': [52.6597, -3.1479],
+            'Machynlleth': [52.5951, -3.8503],
+            'Brecon': [51.9461, -3.3903],
+            
+            // Wales - South
+            'Merthyr Tydfil': [51.7487, -3.3778],
+            'Aberdare': [51.7131, -3.4452],
+            'Mountain Ash': [51.6810, -3.3791],
+            'Pontypridd': [51.6021, -3.3421],
+            'Caerphilly': [51.5742, -3.2180],
+            'Bargoed': [51.6923, -3.2297],
+            'Blackwood': [51.6675, -3.1956],
+            'Tredegar': [51.7709, -3.2406],
+            'Ebbw Vale': [51.7767, -3.2080],
+            'Abergavenny': [51.8241, -3.0166]
+        };
+
+        // Initialize map
+        const map = L.map('map').setView([54.0, -2.5], 6);
+        
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Parse CSV data
+        const parsed = Papa.parse(csvData, {
+            header: true,
+            dynamicTyping: true
+        });
+
+        // Function to get line color and weight based on salary difference
+        function getLineStyle(difference) {
+            let color, weight;
+            
+            if (difference >= 7000) {
+                color = '#d73027';
+                weight = 6;
+            } else if (difference >= 5000) {
+                color = '#fc8d59';
+                weight = 4;
+            } else if (difference >= 3000) {
+                color = '#fee08b';
+                weight = 2;
+            } else {
+                color = '#d9ef8b';
+                weight = 1;
+            }
+            
+            return { color, weight };
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            return '£' + amount.toLocaleString();
+        }
+
+        // Track unique cities for markers
+        const cityMarkers = new Set();
+
+        // Add connections and markers
+        parsed.data.forEach(row => {
+            const townCoords = coordinates[row.Town];
+            const cityCoords = coordinates[row.Nearest_Major_City];
+            
+            if (townCoords && cityCoords) {
+                // Draw connection line
+                const style = getLineStyle(row.Salary_Difference_GBP);
+                const line = L.polyline([townCoords, cityCoords], {
+                    color: style.color,
+                    weight: style.weight,
+                    opacity: 0.7,
+                    smoothFactor: 1
+                }).addTo(map);
+                
+                // Add tooltip to line
+                line.bindTooltip(`${row.Town} → ${row.Nearest_Major_City}<br>Gap: ${formatCurrency(row.Salary_Difference_GBP)}`, {
+                    sticky: true
+                });
+                
+                // Add town marker
+                const townMarker = L.circleMarker(townCoords, {
+                    radius: 5,
+                    fillColor: '#3498db',
+                    color: '#2c3e50',
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map);
+                
+                // Create popup content
+                const popupContent = `
+                    <div class="town-popup">
+                        <h4>${row.Town}</h4>
+                        <div class="popup-stat">
+                            <span class="popup-label">Region:</span> ${row.Region}
+                        </div>
+                        <div class="popup-stat">
+                            <span class="popup-label">Average Salary:</span> ${formatCurrency(row.Average_Salary_GBP)}
+                        </div>
+                        <div class="popup-stat">
+                            <span class="popup-label">Nearest City:</span> ${row.Nearest_Major_City}
+                        </div>
+                        <div class="popup-stat">
+                            <span class="popup-label">City Salary:</span> ${formatCurrency(row.City_Average_Salary_GBP)}
+                        </div>
+                        <div class="popup-stat">
+                            <span class="popup-label">Salary Gap:</span> <strong>${formatCurrency(row.Salary_Difference_GBP)}</strong>
+                        </div>
+                        <div class="popup-stat">
+                            <span class="popup-label">Train Time:</span> ${row.Train_Time_Minutes} mins
+                        </div>
+                    </div>
+                `;
+                
+                townMarker.bindPopup(popupContent);
+                
+                // Add city marker if not already added
+                if (!cityMarkers.has(row.Nearest_Major_City)) {
+                    cityMarkers.add(row.Nearest_Major_City);
+                    const cityMarker = L.circleMarker(cityCoords, {
+                        radius: 10,
+                        fillColor: '#e74c3c',
+                        color: '#c0392b',
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
+                    
+                    cityMarker.bindPopup(`
+                        <div class="town-popup">
+                            <h4>${row.Nearest_Major_City}</h4>
+                            <div class="popup-stat">
+                                <span class="popup-label">City Average Salary:</span> ${formatCurrency(row.City_Average_Salary_GBP)}
+                            </div>
+                        </div>
+                    `);
+                }
+            }
+        });
+
+        // Hide loading message
+        document.getElementById('loading').style.display = 'none';
+
+        // Fit map to show all markers
+        setTimeout(() => {
+            const group = new L.featureGroup(map._layers);
+            if (group.getBounds().isValid()) {
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }, 100);
+    </script>
+</body>
+</html>
