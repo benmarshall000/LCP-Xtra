@@ -265,15 +265,8 @@ sample_df = pd.DataFrame(sample_results)
 print(sample_df.to_string(index=False))
 
 
-import plotly.express as px
-
-# Example data
-df = px.data.iris()
-
-# Create interactive scatter plot
-fig = px.scatter(df, x="sepal_width", y="sepal_length", color="species")
-
 # Save as standalone HTML
 fig.write_html("graph.html")
+
 
 
